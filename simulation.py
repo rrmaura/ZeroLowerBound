@@ -29,18 +29,18 @@ random.seed(0)
 # Parameters:
 n_epochs = 100 # number of epochs
 N_banks = 100 # number of banks
-T = 100 # number of time steps
+T = 30 # number of time steps
 beta = 0.9 # discount factor
 # TODO: use utility function of households and stochastic discount factor
 lmda = 0.5 # legal ratio of deposits to assets
 propor_div = 0.1 # proportion paid out as dividends
-rM = 0.01 # interest rate central bank
+rM = 1.03 # interest rate central bank
 
 # we assume linear demand of Lonad and Deposit
-phi_L_0 = torch.tensor(0) # intercept
-phi_L_1 = torch.tensor(-1) # slope (negative)
-phi_D_0 = torch.tensor(0)
-phi_D_1 = torch.tensor(+1)
+phi_L_0 = torch.tensor(1) # intercept
+phi_L_1 = torch.tensor(-0.01) # slope (negative)
+phi_D_0 = torch.tensor(1)
+phi_D_1 = torch.tensor(+0.01)
 
 # we assume the cost is linear in L and D
 cost_L = 1
@@ -55,7 +55,7 @@ def rD(Di):
     total_D = torch.sum(Di)
     # return torch.sum(phi_D_0, phi_D_1*total_D)
     # zero lower bound: the rate for Deposits cannot be lower than 0 
-    return torch.max(torch.add(phi_D_1*total_D, phi_D_0), torch.tensor(0.0))
+    return torch.max(torch.add(phi_D_1*total_D, phi_D_0), torch.tensor(1.0))
 
 def cost(Li,Di):
     # TODO: am I breaking the graph? Do I need torch.multiply(const_L, L) ?
@@ -112,21 +112,29 @@ def objective():
 optimizer = optim.Adam(loans_net.parameters(), lr=0.001)
 
 for _ in tqdm(range(n_epochs)):
+    # keep track of the training error
+    losses = []
     optimizer.zero_grad()
     loss = -objective() # we want to maximize the objective
     loss.backward()
     optimizer.step()
+    losses.append(loss.item())
 
-# plot the policy function for the first bank from E = 0 to E = 1
-# assume all other banks have the same equity = 1
-E = torch.ones(100,N_banks)
-E[:,0] = torch.linspace(0,1,100)
-L = loans_net(E)
-equity_first_bank = E[:,0].detach().numpy()
-loan_first_bank = L[:,0].detach().numpy()
-plt.plot(equity_first_bank, loan_first_bank)
+# plot the training error
+plt.plot(losses)
 plt.show()
 
-# what is the problem with the previous code?
+
+# # plot the policy function for the first bank from E = 0 to E = 1
+# # assume all other banks have the same equity = 1
+# E = torch.ones(100,N_banks)
+# E[:,0] = torch.linspace(0,1,100)
+# L = loans_net(E)
+# equity_first_bank = E[:,0].detach().numpy()
+# loan_first_bank = L[:,0].detach().numpy()
+# plt.plot(equity_first_bank, loan_first_bank)
+# plt.show()
+
+# # what is the problem with the previous code?
 
 
