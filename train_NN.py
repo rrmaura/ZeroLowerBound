@@ -17,7 +17,7 @@ np.random.seed(0)
 random.seed(0)
 
 n_epochs = 600 # number of epochs
-patience = 100  # number of epochs to wait before early stopping
+patience = 200  # number of epochs to wait before early stopping
 
 best_loss = float('inf')
 wait = 0  # number of epochs waited

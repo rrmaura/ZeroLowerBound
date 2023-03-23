@@ -155,16 +155,32 @@ def equity_next_and_dividends_f(Ei):
     return equity_next, dividends
  
 def objective():
-    Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity
-    value = t.zeros_like(Ei)
-    discount = 1 #SDF
-    for _ in range(T):
-        Ei, dividends = equity_next_and_dividends_f(Ei) # update Ei
-        # value += discount*dividends 
-        value = t.add(value, t.mul(discount, dividends))
-        discount *= discount*beta# TODO: add stochastic discount factor
+    # value = t.zeros_like(Ei)
+    value = t.zeros(N_banks)
+
+    n_simulations_in_epoch=10
+    for _ in range(n_simulations_in_epoch):
+        Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity
+        discount = 1 #SDF
+        for _ in range(T):
+            Ei, dividends = equity_next_and_dividends_f(Ei) # update Ei
+            # value += discount*dividends 
+            value = t.add(value, t.mul(discount, dividends))
+            discount *= discount*beta# TODO: add stochastic discount factor
     return t.sum(value) # the social planner cares equally about all banks
 
 optimizer = optim.Adam(percent_assets_to_reserves.parameters(), lr=0.0001)
+
+def initialize_and_load_NN():
+    try: 
+        percent_assets_to_reserves = PolicyNet(input_size=N_banks,
+                                    hidden_size=hidden_size,
+                                    output_size=N_banks)
+    
+        percent_assets_to_reserves.load_state_dict(t.load('percent_assets_to_reserves.pt'))
+        return percent_assets_to_reserves
+    except: 
+        print("no weights found for the NN. Did you run train_NN.py?")
+
 
 losses = []

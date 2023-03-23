@@ -33,14 +33,7 @@ t.manual_seed(1)
 np.random.seed(1)
 random.seed(1)
 
-try: 
-    percent_assets_to_reserves = PolicyNet(input_size=N_banks,
-                                hidden_size=hidden_size,
-                                output_size=N_banks)
- 
-    percent_assets_to_reserves.load_state_dict(t.load('percent_assets_to_reserves.pt'))
-except: 
-    print("no weights found for the NN. Did you run train_NN.py?")
+percent_assets_to_reserves = initialize_and_load_NN()
 
 # plot the policy function for the first bank from E = 0 to E = 1
 # assume all other banks have the same equity = 1
@@ -178,8 +171,7 @@ plt.title('interest rates')
 plt.savefig('plots/interest_rates.png')
 plt.clf()
 
-# we can check that the FOC and the Euler equation and Bellman are satisfied
-# or do alternative method and see that solutions coincide. 
+# we can do alternative method (XGBoost) and see that solutions coincide. 
 # TODO: check maliars and how they did it
 
 # see how the model evolves (retraining the NN) with r_m increasing from -0.1 to 0.1
