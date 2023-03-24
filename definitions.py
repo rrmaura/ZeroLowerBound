@@ -42,6 +42,8 @@ def rL(Li):
     total_L = t.sum(Li)
     K = total_L 
     K = t.max(K, t.tensor(0.00001)) # stop division by 0
+    # TODO: in case K is 0, give a warning
+    
     alpha = 0.3
     # The formula of returns for the firm implies:
     # r = alpha * k**(alpha-1)
