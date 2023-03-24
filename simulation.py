@@ -1,3 +1,5 @@
+# TODO: size transition and cost function. 
+# try transition without noise (sigman = 0) and noise without transition
 # TODO: Why do people perfer Loans to Deposits? Deposits higher return and no cost
 # TODO: bigger neural networks? 
 # TODO: the deposits are touching the lower bound
