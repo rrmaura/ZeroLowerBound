@@ -28,7 +28,7 @@ lmda = 0.85 # legal ratio of deposits to assets (0.97 in calibration, but this
 # value gives a more reasonable ratio of deposits to equity )
 propor_div = 0.04 # proportion paid out as dividends (0.02<mu<0.05)
 rM = 0.03 # interest rate central bank
-
+sigma = 0.0 # standard deviation of the shock to the cost of the banks
 R_M = 1 + rM 
 
 # we assume the cost is linear in L and D
@@ -91,10 +91,59 @@ def R_D(Di):
     R_D = t.add(1, r_D) # R = 1+r
     return R_D
 
+def size_multiplier_f(size):
+    # properties of the function:
+    # 1) decreasing function of size (the bigger the bank, the lest cost per loan)
+    # 2) the function is 1 for size=1
+    # This ensures that, in the limit of competitive equilibrium, when all banks
+    # are of the same size, and size = 1, then... TODO: check this
+    return t.divide(t.tensor(1.0), size)
 
-def cost(Li,Di):
+def size_of_bank_after_mergers(size, Ei):
+    # TODO: does this create concentration? or should I give all the size to the
+    # bank with highest equity?
+
+    """
+    takes the size of all banks and the equity of all banks
+    and returns the new size of all banks.
+    
+    To do this, it checks which banks are bankrupt, and then
+    it splits the size of the bankrupt banks among the other banks.
+    the probability of a bank A buying/merging with another bankrupt bank B is
+    proportional to the equity of the bank A.
+    
+    parameters:
+    size: tensor of size N_banks, with the size of each bank
+    Ei: tensor of size N_banks, with the equity of each bank
+
+    returns:
+    size: tensor of size N_banks, with the new size of each bank
+    """
+
+    # size of bankrupt banks is the sum of the size of all banks where Ei = 0
+    bankrupt_mask = t.eq(Ei, t.tensor(0.0))
+    size_bankrupt = t.sum(t.masked_select(size, bankrupt_mask))
+
+    # probability of buying a bankrupt bank is proportional to the equity of the bank
+    prob_buy_bankrupt = t.div(Ei, t.sum(Ei))
+    
+    new_size = t.add(size, t.mul(size_bankrupt, prob_buy_bankrupt))
+    return new_size 
+
+def cost(Li,Di, size):
     # TODO: add f(n) function cost as a function of size of firm n
-    return t.add(t.mul(cost_L, Li), t.mul(cost_D, Di)) 
+    size_multiplier = size_multiplier_f(size)
+    cost_without_noise = t.add(t.mul(cost_L, Li), t.mul(cost_D, Di))
+    noise = t.mul(sigma, t.randn_like(cost_without_noise)) # N(0,sigma) noise
+    cost  = t.mul(size_multiplier,cost_without_noise) + noise
+
+    # ensure this does not ressurrects bankrupt banks
+    # if size = 0, then the bank is bankrupt, so cost = 0. 
+    bankrupt_mask = t.eq(size, t.tensor(0.0))
+    cost = t.where(bankrupt_mask, t.tensor(0.0), cost)
+
+    # Note: cost can be negative, but this is not a problem. 
+    return cost
 
 # try method 1 from Deep Learning for solving dynamic economic models.
 # by Lilia Maliar, Serguei Maliar, Pablo Winant 
@@ -132,7 +181,7 @@ hist_D = []
 hist_M = []
 append_hist = lambda history, event: history.append(event.detach().numpy())
 
-def equity_next_and_dividends_f(Ei):
+def next_equity_size_and_dividents(Ei, size):
     Di = Ei*lmda/(1-lmda)
     total_assets = Di + Ei
     Mi = t.mul(percent_assets_to_reserves(Ei), total_assets)
@@ -140,35 +189,42 @@ def equity_next_and_dividends_f(Ei):
     # Li = Di + Ei - Mi
     Li = t.add(t.add(Di, Ei), -Mi)
 
-    # profits = Mi*rM + Li*rL(Li) - Di*rD(Di) - cost(Li,Di)
+    # profits = Mi*rM + Li*rL(Li) - Di*rD(Di) - cost(Li,Di, size)
     profits = t.add(t.add(t.mul(Mi, rM),
                     t.mul(Li, rL(Li))),
                     t.add(-t.mul(Di, rD(Di)), 
-                    -cost(Li,Di)))
+                    -cost(Li,Di, size)))
 
     dividends = t.mul(propor_div, profits)
     # equity_next = Ei + profits - dividends
     equity_next = t.add(t.add(Ei, profits), -dividends)    
     # if equity negative, the bank is bankrupt forever
     equity_next = t.max(equity_next, t.tensor(0.0))
-    
+
     # ROE = t.div(profits, Ei) # around 10%, close to empirical ROE
 
-    return equity_next, dividends
+    size = size_of_bank_after_mergers(size, equity_next)
+
+    return equity_next, size, dividends
  
 def objective():
     # value = t.zeros_like(Ei)
     value = t.zeros(N_banks)
-
+    # draw from the simplex of size N_banks
+    size = t.distributions.dirichlet.Dirichlet(t.ones(N_banks)).sample() * N_banks
+    # size = t.ones(N_banks) # initial size of all banks 
+    
     n_simulations_in_epoch=10
     for _ in range(n_simulations_in_epoch):
         Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity
         discount = 1 #SDF
         for _ in range(T):
-            Ei, dividends = equity_next_and_dividends_f(Ei) # update Ei
+            Ei, size, dividends = next_equity_size_and_dividents(Ei, size) # update Ei
             # value += discount*dividends 
             value = t.add(value, t.mul(discount, dividends))
             discount *= discount*beta# TODO: add stochastic discount factor
+            
+
     return t.sum(value) # the social planner cares equally about all banks
 
 optimizer = optim.Adam(percent_assets_to_reserves.parameters(), lr=0.0001)
