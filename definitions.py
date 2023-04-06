@@ -19,7 +19,7 @@ random.seed(0)
 # Parameters:
 MAX_EQUITY = 100 # max equity used for training the NN
 N_banks = 100 # number of banks (TODO: change it to 4236)
-T = 150 # number of time steps
+T = 80 # number of time steps
 theta = 0.5 # risk_aversion , inverse of the elasticity of substitution
 beta = 0.97 # discount factor
 marginal_rate = 0.96 # U'(C_t) / U'(C_{t+1}
@@ -203,9 +203,9 @@ def next_equity_size_and_dividents(Ei, size):
 
     # ROE = t.div(profits, Ei) # around 10%, close to empirical ROE
 
-    size = size_of_bank_after_mergers(size, equity_next)
+    size_next = size_of_bank_after_mergers(size, equity_next)
 
-    return equity_next, size, dividends
+    return equity_next, size_next, dividends
  
 def objective():
     # value = t.zeros_like(Ei)
@@ -215,10 +215,10 @@ def objective():
     # size = t.ones(N_banks) # initial size of all banks 
     
     n_simulations_in_epoch=10
-    for _ in range(n_simulations_in_epoch):
+    for epoch in range(n_simulations_in_epoch):
         Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity
         sdf_t = 1 #SDF
-        for _ in range(T):
+        for time in range(T):
             Ei, size, dividends = next_equity_size_and_dividents(Ei, size) # update Ei
             # value += sdf_t*dividends 
             value = t.add(value, t.mul(sdf_t, dividends))

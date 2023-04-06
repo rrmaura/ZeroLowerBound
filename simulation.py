@@ -63,10 +63,12 @@ hist_rM = np.ones(length_simulation) * rM
 # initial equity and size
 E = t.ones(N_banks)
 size = t.ones(N_banks)
+sum_size = size.sum()
 for i in tqdm(range(length_simulation)):
     # ensure simulation space is same as training space
     assert (E >= 0).all()
     assert (MAX_EQUITY >= E).all() 
+    assert sum_size == size.sum() # ensure size is not changing
 
     E, size, dividends = next_equity_size_and_dividents(E, size) 
     D = E*lmda/(1-lmda)
@@ -85,6 +87,18 @@ for i in tqdm(range(length_simulation)):
 
 accounting_condition = (hist_totalAssets - hist_M - hist_L)
 assert np.isclose(accounting_condition,0, 0.0001, 0.0001).all
+
+
+#######################################################
+                        # PLOTS #
+#######################################################
+
+# plot the distribution of equity at time 0, T/2 and T
+for time in [0, length_simulation//2, length_simulation-1]:
+    plt.hist(hist_E[time], bins=100)
+    plt.title('distribution of equity at time ' + str(time))
+    plt.savefig('plots/distribution_of_equity_at_time_' + str(time) + '.png')
+    plt.clf()
 
 # plot the mean history of Equity and Loans
 for account, hist_acc in [("Equity", hist_E),
