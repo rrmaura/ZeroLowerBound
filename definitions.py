@@ -221,11 +221,11 @@ def objective():
         for _ in range(T):
             Ei, size, dividends = next_equity_size_and_dividents(Ei, size) # update Ei
             # value += sdf_t*dividends 
-            value = t.add(value, t.mul(discount, dividends))
+            value = t.add(value, t.mul(sdf_t, dividends))
             sdf_t *= SDF 
             
-
-    return t.sum(value) # the social planner cares equally about all banks
+    value = t.div(value, n_simulations_in_epoch) # average over simulations
+    return t.mean(value) # the social planner cares equally about all banks
 
 optimizer = optim.Adam(percent_assets_to_reserves.parameters(), lr=0.0001)
 
