@@ -22,8 +22,8 @@ N_banks = 100 # number of banks (TODO: change it to 4236)
 T = 150 # number of time steps
 theta = 0.5 # risk_aversion , inverse of the elasticity of substitution
 beta = 0.97 # discount factor
-# TODO: add stochastic discount factor (utility function of households)
-# beta * stochastic discount factor 
+marginal_rate = 0.96 # U'(C_t) / U'(C_{t+1}
+SDF = marginal_rate * 0.97
 lmda = 0.85 # legal ratio of deposits to assets (0.97 in calibration, but this
 # value gives a more reasonable ratio of deposits to equity )
 propor_div = 0.04 # proportion paid out as dividends (0.02<mu<0.05)
@@ -217,12 +217,12 @@ def objective():
     n_simulations_in_epoch=10
     for _ in range(n_simulations_in_epoch):
         Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity
-        discount = 1 #SDF
+        sdf_t = 1 #SDF
         for _ in range(T):
             Ei, size, dividends = next_equity_size_and_dividents(Ei, size) # update Ei
-            # value += discount*dividends 
+            # value += sdf_t*dividends 
             value = t.add(value, t.mul(discount, dividends))
-            discount *= discount*beta# TODO: add stochastic discount factor
+            sdf_t *= SDF 
             
 
     return t.sum(value) # the social planner cares equally about all banks
