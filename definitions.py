@@ -40,7 +40,7 @@ lmda = 0.85 # legal ratio of deposits to assets (0.97 in calibration, but this
 # value gives a more reasonable ratio of deposits to equity )
 propor_div = 0.04 # proportion paid out as dividends (0.02<mu<0.05)
 rM = 0.03 # interest rate central bank
-sigma = 0.0 # standard deviation of the shock to the cost of the banks
+
 R_M = 1 + rM 
 
 
@@ -219,18 +219,18 @@ def next_equity_size_and_dividents(Ei, size):
     # Li = Di + Ei - Mi
     Li = t.add(t.add(Di, Ei), -Mi)
 
-    # profits = Mi*rM + Li*rL(Li) - Di*rD(Di) - cost(Li,Di, size)
+    # profits = Mi*rM + Li*rL(Li) - Di*rD(Di) - cost(Li,Di)
     profits = t.add(t.add(t.mul(Mi, rM),
                     t.mul(Li, rL(Li))),
                     t.add(-t.mul(Di, rD(Di)), 
-                    -cost(Li,Di, size)))
+                    -cost(Li,Di)))
 
     dividends = t.mul(propor_div, profits)
     # equity_next = Ei + profits - dividends
     equity_next = t.add(t.add(Ei, profits), -dividends)    
     # if equity negative, the bank is bankrupt forever
     equity_next = t.max(equity_next, t.tensor(0.0))
-
+    
     # ROE = t.div(profits, Ei) # around 10%, close to empirical ROE
 
     size_next = size_of_bank_after_mergers(size, equity_next)
@@ -239,10 +239,7 @@ def next_equity_size_and_dividents(Ei, size):
  
 def objective():
     value = t.zeros(N_banks)
-    # draw from the simplex of size N_banks
-    size = t.distributions.dirichlet.Dirichlet(t.ones(N_banks)).sample() * N_banks
-    # size = t.ones(N_banks) # initial size of all banks 
-    
+
     n_simulations_in_epoch=10
     for _ in range(n_simulations_in_epoch):
         Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity

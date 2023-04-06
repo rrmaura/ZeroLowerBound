@@ -1,11 +1,17 @@
+# TODO: size transition and cost function. 
+# try transition without noise (sigman = 0) and noise without transition
 # TODO: Why do people perfer Loans to Deposits? Deposits higher return and no cost
 # TODO: bigger neural networks? 
 # TODO: the deposits are touching the lower bound
 # TODO: all companies should be symmetric in the beginning. use last layer to enforce this? 
+# TODO: explosive growht. Companies increase size by 100% in 5 years
+# TODO: equity deposits rations unstables
 # TODO: Profiling for faster code. 
 # TODO: what is Y in the household problem? 
 # TODO peace of mind. Ensure that without any shocks,
 #  the system is stable and the solution is the analytical one
+# TODO: add shocks to the system
+# TODO: add f(n) function cost as a function of size of firm n
 # TODO: so far, ratio of deposits to assets is equality. Make it inequality.
 # TODO: add things to assert. E.g. ROE around 5% and 10%. Rates not 1000%.
 """
@@ -45,14 +51,14 @@ plt.savefig('plots/reserves_first_bank.png')
 plt.clf()
 
 # run a simulation
-length_simulation = 25
+length_simulation = 30
 
 # history 
-hist_totalAssets = np.zeros((length_simulation, N_banks))
 hist_E = np.zeros((length_simulation, N_banks))
 hist_L = np.zeros((length_simulation, N_banks))
 hist_D = np.zeros((length_simulation, N_banks))
 hist_M = np.zeros((length_simulation, N_banks))
+hist_totalAssets = np.zeros((length_simulation, N_banks))
 hist_rL = np.zeros(length_simulation)
 hist_rD = np.zeros(length_simulation)
 hist_rM = np.ones(length_simulation) * rM
@@ -65,18 +71,18 @@ for i in tqdm(range(length_simulation)):
     assert (E >= 0).all()
     assert (MAX_EQUITY >= E).all() 
 
-    E, size, dividends = next_equity_size_and_dividents(E, size) 
+    E, dividends = equity_next_and_dividends_f(E) # update E
     D = E*lmda/(1-lmda)
     total_assets = t.add(E, D)
     M = t.mul(percent_assets_to_reserves(E), total_assets)
     L = t.add(t.add(E, E*lmda/(1-lmda)), -M)
 
     # append history
-    hist_totalAssets[i] = total_assets.detach().numpy()
     hist_E[i] = E.detach().numpy()
     hist_L[i] = L.detach().numpy()
     hist_D[i] = D.detach().numpy()
     hist_M[i] = M.detach().numpy()
+    hist_totalAssets[i] = total_assets.detach().numpy()
     hist_rL[i] = rL(L).detach().numpy()
     hist_rD[i] = rD(D).detach().numpy()
 
@@ -169,25 +175,8 @@ plt.title('interest rates')
 plt.savefig('plots/interest_rates.png')
 plt.clf()
 
-# plot the distribution of equity at time 0
-plt.hist(hist_E[0], bins=100)
-plt.title('distribution of equity at time 0')
-plt.savefig('plots/distribution_of_equity_at_time_0.png')
-plt.clf()
-
-# plot the distribution of equity at time length_simulation/2
-plt.hist(hist_E[length_simulation//2], bins=100)
-plt.title('distribution of equity at time ' + str(length_simulation//2))
-plt.savefig('plots/distribution_of_equity_at_time_' + str(length_simulation//2) + '.png')
-plt.clf()
-
-# plot the distribution of equity at time length_simulation
-plt.hist(hist_E[length_simulation-1], bins=100)
-plt.title('distribution of equity at time ' + str(length_simulation-1))
-plt.savefig('plots/distribution_of_equity_at_time' + str(length_simulation-1) + '.png')
-plt.clf()
-
 # we can do alternative method (XGBoost) and see that solutions coincide. 
+# TODO: check maliars and how they did it
 
 # see how the model evolves (retraining the NN) with r_m increasing from -0.1 to 0.1
 
