@@ -30,17 +30,17 @@ random.seed(0)
 # Parameters:
 MAX_EQUITY = 100 # max equity used for training the NN
 INITIAL_EQUITY = 1 # initial equity of the banks
-N_banks = 100 # number of banks (TODO: change it to 4236)
+N_banks = 150 # number of banks (TODO: change it to 4236)
 T = 150 # number of time steps
 theta = 0.5 # risk_aversion , inverse of the elasticity of substitution
-beta = 0.97 # discount factor
+beta = 0.96 # discount factor
 # TODO: add stochastic discount factor (utility function of households)
-SDF = 1 * beta #Stochastic discount factor 
+SDF = 0.97 * beta #Stochastic discount factor 
 lmda = 0.85 # legal ratio of deposits to assets (0.97 in calibration, but this
 # value gives a more reasonable ratio of deposits to equity )
 propor_div = 0.04 # proportion paid out as dividends (0.02<mu<0.05)
 rM = 0.03 # interest rate central bank
-
+sigma = 0.01 # variance of the shock of cost (we have to think about units)
 R_M = 1 + rM 
 
 
@@ -104,7 +104,8 @@ def R_D(Di):
     R_D = t.add(1, r_D) # R = 1+r
     return R_D
 
-def size_multiplier_of_cost(size):
+
+def size_multiplier_f(size):
     """
     This function returns the multiplier of the cost of the bank. 
     That is, the cost of the bank is proportional to the size of the bank.
@@ -143,7 +144,6 @@ def size_of_bank_after_mergers(size, Ei):
     returns:
     size: tensor of size N_banks, with the new size of each bank
     """
-
     # size of bankrupt banks is the sum of the size of all banks where Ei = 0
     bankrupt_mask = t.eq(Ei, t.tensor(0.0))
     size_bankrupt = t.sum(t.masked_select(size, bankrupt_mask))
@@ -155,8 +155,7 @@ def size_of_bank_after_mergers(size, Ei):
     return new_size 
 
 def cost(Li,Di, size):
-    # TODO: add f(n) function cost as a function of size of firm n
-    size_multiplier = size_multiplier_of_cost(size)
+    size_multiplier = size_multiplier_f(size) 
     cost_without_noise = t.add(t.mul(cost_L, Li), t.mul(cost_D, Di))
     noise = t.mul(sigma, t.randn_like(cost_without_noise)) # N(0,sigma) noise
     cost  = t.mul(size_multiplier,cost_without_noise) + noise
@@ -193,7 +192,7 @@ class PolicyNet(nn.Module):
         x = F.relu(self.fc2(x))
         x = t.sigmoid(self.fc3(x))
         return x
-hidden_size = 10
+hidden_size = 16
 percent_assets_to_reserves = PolicyNet(input_size=N_banks,
                       hidden_size=hidden_size,
                       output_size=N_banks)
@@ -223,7 +222,7 @@ def next_equity_size_and_dividents(Ei, size):
     profits = t.add(t.add(t.mul(Mi, rM),
                     t.mul(Li, rL(Li))),
                     t.add(-t.mul(Di, rD(Di)), 
-                    -cost(Li,Di)))
+                    -cost(Li,Di, size)))
 
     dividends = t.mul(propor_div, profits)
     # equity_next = Ei + profits - dividends
@@ -243,18 +242,18 @@ def objective():
     n_simulations_in_epoch=10
     for _ in range(n_simulations_in_epoch):
         Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity
-        SDF_t = 1.0
+        size = t.distributions.dirichlet.Dirichlet(t.ones(N_banks)).sample() * N_banks
+        sdf_t = 1.0
         for _ in range(T):
-            # update Ei
-            Ei, size, dividends = next_equity_size_and_dividents(Ei, size) 
-            # value += SDF*dividends 
-            value = t.add(value, t.mul(SDF, dividends))
-            SDF_t *= SDF 
-            
+            Ei, size, dividends = next_equity_size_and_dividents(Ei, size) # update Ei
+            # value += sdf_t*dividends 
+            value = t.add(value, t.mul(sdf_t, dividends))
+            sdf_t *= SDF # TODO: add stochastic discount factor
+    # divide the value by the number of simulations to get the average
+    value = t.div(value, n_simulations_in_epoch)
+    return t.mean(value) # the social planner cares equally about all banks
 
-    return t.sum(value) # the social planner cares equally about all banks
-
-optimizer = optim.Adam(percent_assets_to_reserves.parameters(), lr=0.0001)
+optimizer = optim.Adam(percent_assets_to_reserves.parameters(), lr=0.001)
 
 def initialize_and_load_NN():
     try: 

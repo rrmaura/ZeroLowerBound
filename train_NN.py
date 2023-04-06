@@ -28,16 +28,23 @@ for epoch in tqdm(range(n_epochs)):
     loss.backward()
     optimizer.step()
     losses.append(loss.item())
+    if epoch % 20 == 0:
+        print(f"Epoch {epoch} loss: {loss.item()}")
 
     # Early stop. There is no need for validation set.
+    # keep weights of the best model
     # check if loss improved
     if loss < best_loss:
         best_loss = loss
         wait = 0
+        # weights of the best model
+        t.save(percent_assets_to_reserves.state_dict(), 'percent_assets_to_reserves.pt')
     else:
         wait += 1
         if wait >= patience:
             print(f"Loss hasn't improved in {patience} epochs. Stop")
+            # load the best weights
+            percent_assets_to_reserves.load_state_dict(t.load('percent_assets_to_reserves.pt'))
             break
 
 # save the neural network weights

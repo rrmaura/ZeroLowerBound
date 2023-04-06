@@ -3,11 +3,10 @@ import numpy as np
 import torch 
 from definitions import *
 
-N_BANKS = 100
 class TestSimulation(unittest.TestCase):
     def test_network_not_nan(self):
         # test that the network is not nan
-        E = torch.ones(100,N_BANKS)
+        E = torch.ones(100,N_banks)
         percent_assets_to_reserves = initialize_and_load_NN()
 
         percent = percent_assets_to_reserves(E)
@@ -65,7 +64,7 @@ class TestSimulation(unittest.TestCase):
             Li_delta[i] += Delta
             profits_deltaL = Mi*rM + Li_delta*rL(Li_delta) - Di*rD(Di) - cost(Li_delta,Di, size)
             dprofits_dLi = (profits_deltaL - profits)/Delta
-            # print(round(dprofits_dLi[0].item(),3))
+            print(round(dprofits_dLi[0].item(),3))
             assert abs(dprofits_dLi[0].item()) < 0.01
 
             # now the same with respect to Di
@@ -73,7 +72,7 @@ class TestSimulation(unittest.TestCase):
             Di_delta[i] += Delta
             profits_deltaD = Mi*rM + Li*rL(Li) - Di_delta*rD(Di_delta) - cost(Li,Di_delta, size)
             dprofits_dDi = (profits_deltaD - profits)/Delta
-            # print(round(dprofits_dDi[0].item(),3))
+            print(round(dprofits_dDi[0].item(),3))
             assert abs(dprofits_dDi[0].item()) < 0.01
 
             # equation 83
@@ -81,7 +80,10 @@ class TestSimulation(unittest.TestCase):
             # print(round(Di[i].item() - lmda*Li[i].item() - lmda*Mi[i].item(),3))
             assert abs(Di[i].item() - lmda*Li[i].item() - lmda*Mi[i].item()) < 0.01
 
-        
+# test FOCs
+# test that the FOCs are satisfied
+test = TestSimulation()
+test.test_FOCs()
 
 if __name__ == '__main__':
     unittest.main()
