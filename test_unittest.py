@@ -10,12 +10,12 @@ class TestSimulation(unittest.TestCase):
         E = torch.ones(100,N_BANKS)
         percent_assets_to_reserves = initialize_and_load_NN()
 
-
         percent = percent_assets_to_reserves(E)
         self.assertFalse(torch.isnan(percent).any())
         return 
 
     def test_interest_rates_reasonable(self):
+        size = torch.ones(N_banks) # initial size of all banks #TODO: TRAIN WITH DIFFERENT SIZES
         percent_assets_to_reserves = initialize_and_load_NN()
         # test that the interest rates are reasonable
         Ei = torch.rand(N_banks)
@@ -23,13 +23,13 @@ class TestSimulation(unittest.TestCase):
         Mi = t.mul(percent_assets_to_reserves(Ei), total_assets)
         Di = Ei*lmda/(1-lmda)
         Li = Di + Ei - Mi
-        profits = Mi*rM + Li*rL(Li) - Di*rD(Di) - cost(Li,Di)
+        profits = Mi*rM + Li*rL(Li) - Di*rD(Di) - cost(Li,Di, size)
         dividends = propor_div*profits
 
     def test_FOCs(self): 
         # test that the FOCs are satisfied
+        size = torch.ones(N_banks) # initial size of all banks #TODO: TRAIN WITH DIFFERENT SIZES
 
-        
         # load solution neural network
         percent_assets_to_reserves = initialize_and_load_NN()
         Ei = torch.rand(N_banks)
@@ -43,27 +43,27 @@ class TestSimulation(unittest.TestCase):
 
         # propor_div + beta*(1-propor_div)*dV/dEi = 0
         
-        def deterministic_value_function(Ei): 
+        def deterministic_value_function(Ei, size): 
             value = t.zeros_like(Ei)
             discount = 1 #SDF
             for _ in range(T):
-                Ei, dividends = equity_next_and_dividends_f(Ei) # update Ei
+                Ei, size, dividends = next_equity_size_and_dividents(Ei, size) # update Ei
                 # value += discount*dividends 
                 value = t.add(value, t.mul(discount, dividends))
                 discount *= discount*beta# TODO: add stochastic discount factor
             return value
         Delta = 0.0001
-        V = deterministic_value_function(Ei) # only i-th bank 
+        V = deterministic_value_function(Ei, size) # only i-th bank 
         for i in range(N_banks):
             V_i = V[i]
             Ei_delta = Ei.clone()
             Ei_delta[i] += Delta # only the first bank changes
             
 
-            profits = Mi*rM + Li*rL(Li) - Di*rD(Di) - cost(Li,Di)
+            profits = Mi*rM + Li*rL(Li) - Di*rD(Di) - cost(Li,Di, size)
             Li_delta = Li.clone()
             Li_delta[i] += Delta
-            profits_deltaL = Mi*rM + Li_delta*rL(Li_delta) - Di*rD(Di) - cost(Li_delta,Di)
+            profits_deltaL = Mi*rM + Li_delta*rL(Li_delta) - Di*rD(Di) - cost(Li_delta,Di, size)
             dprofits_dLi = (profits_deltaL - profits)/Delta
             # print(round(dprofits_dLi[0].item(),3))
             assert abs(dprofits_dLi[0].item()) < 0.01
@@ -71,7 +71,7 @@ class TestSimulation(unittest.TestCase):
             # now the same with respect to Di
             Di_delta = Di.clone()
             Di_delta[i] += Delta
-            profits_deltaD = Mi*rM + Li*rL(Li) - Di_delta*rD(Di_delta) - cost(Li,Di_delta)
+            profits_deltaD = Mi*rM + Li*rL(Li) - Di_delta*rD(Di_delta) - cost(Li,Di_delta, size)
             dprofits_dDi = (profits_deltaD - profits)/Delta
             # print(round(dprofits_dDi[0].item(),3))
             assert abs(dprofits_dDi[0].item()) < 0.01

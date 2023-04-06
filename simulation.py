@@ -15,9 +15,6 @@ Banks can choose Loans (L), Deposits (D), Reserves (M) and Equity (E)
 such that M+L = D+E
 """
 import torch as t
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
 import random
@@ -31,11 +28,11 @@ random.seed(1)
 
 percent_assets_to_reserves = initialize_and_load_NN()
 
-# plot the policy function for the first bank from E = 0 to E = 1
-# assume all other banks have the same equity = 1
+# plot the policy function for the first bank from E = 0 to E = INITIAL_EQUITY
+# assume all other banks have the same equity = INITIAL_EQUITY
 n_points = 1000
-E = t.ones(n_points, N_banks)
-E[:,0] = t.linspace(0,1,n_points)
+E = t.ones(n_points, N_banks) * INITIAL_EQUITY
+E[:,0] = t.linspace(0,INITIAL_EQUITY,n_points)
 total_assets = t.add(E, E*lmda/(1-lmda))
 M = t.mul(percent_assets_to_reserves(E), total_assets)
 equity_first_bank = E[:,0].detach().numpy()
@@ -61,7 +58,7 @@ hist_rD = np.zeros(length_simulation)
 hist_rM = np.ones(length_simulation) * rM
 
 # initial equity and size
-E = t.ones(N_banks)
+E = t.ones(N_banks) * INITIAL_EQUITY
 size = t.ones(N_banks)
 for i in tqdm(range(length_simulation)):
     # ensure simulation space is same as training space
@@ -85,6 +82,11 @@ for i in tqdm(range(length_simulation)):
 
 accounting_condition = (hist_totalAssets - hist_M - hist_L)
 assert np.isclose(accounting_condition,0, 0.0001, 0.0001).all
+
+#######################################################
+                        # PLOTS #
+#######################################################
+
 
 # plot the mean history of Equity and Loans
 for account, hist_acc in [("Equity", hist_E),

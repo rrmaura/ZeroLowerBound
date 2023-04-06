@@ -4,6 +4,17 @@ is a partial equilibrium model, with only heteorgeneous banks.
 Banks can choose Loans (L), Deposits (D), Reserves (M) and Equity (E)
 such that M+L = D+E
 """
+# TODO: parameters - calibration?
+# is INITIAL_EQUITY = 1 reasonable? How many banks? this affectgs the amount of loans
+# think about the rL function and why is it so low
+# think about why the reserves are so low (close to 0%)
+# stochastic discount factor
+# Y mana for households in demand of deposits functino rD
+# sigma, the variance of the shock of cost (we have to think about units)
+# cost_L and cost_D feel too low? 
+# hidden_size bigger ( is 10 small?). try 64, 128? I dont think more layers are needed
+# TODO: think 
+# is it reasonable that the proportion of reserves increases linearly with E?
 import torch as t
 import torch.nn as nn
 import torch.nn.functional as F
@@ -18,18 +29,20 @@ random.seed(0)
 
 # Parameters:
 MAX_EQUITY = 100 # max equity used for training the NN
+INITIAL_EQUITY = 1 # initial equity of the banks
 N_banks = 100 # number of banks (TODO: change it to 4236)
 T = 150 # number of time steps
 theta = 0.5 # risk_aversion , inverse of the elasticity of substitution
 beta = 0.97 # discount factor
 # TODO: add stochastic discount factor (utility function of households)
-# beta * stochastic discount factor 
+SDF = 1 * beta #Stochastic discount factor 
 lmda = 0.85 # legal ratio of deposits to assets (0.97 in calibration, but this
 # value gives a more reasonable ratio of deposits to equity )
 propor_div = 0.04 # proportion paid out as dividends (0.02<mu<0.05)
 rM = 0.03 # interest rate central bank
 sigma = 0.0 # standard deviation of the shock to the cost of the banks
 R_M = 1 + rM 
+
 
 # we assume the cost is linear in L and D
 cost_L = 0.0001
@@ -91,7 +104,18 @@ def R_D(Di):
     R_D = t.add(1, r_D) # R = 1+r
     return R_D
 
-def size_multiplier_f(size):
+def size_multiplier_of_cost(size):
+    """
+    This function returns the multiplier of the cost of the bank. 
+    That is, the cost of the bank is proportional to the size of the bank.
+    In particular, COST = f(size_i) * (cost_L * Li  + cost_D * Di). 
+
+    arguments:
+    size: tensor of size N_banks, with the size of each bank
+
+    returns:
+    multiplier: tensor of size N_banks, with the multiplier of the cost f(size)
+    """
     # properties of the function:
     # 1) decreasing function of size (the bigger the bank, the lest cost per loan)
     # 2) the function is 1 for size=1
@@ -132,7 +156,7 @@ def size_of_bank_after_mergers(size, Ei):
 
 def cost(Li,Di, size):
     # TODO: add f(n) function cost as a function of size of firm n
-    size_multiplier = size_multiplier_f(size)
+    size_multiplier = size_multiplier_of_cost(size)
     cost_without_noise = t.add(t.mul(cost_L, Li), t.mul(cost_D, Di))
     noise = t.mul(sigma, t.randn_like(cost_without_noise)) # N(0,sigma) noise
     cost  = t.mul(size_multiplier,cost_without_noise) + noise
@@ -182,9 +206,15 @@ hist_M = []
 append_hist = lambda history, event: history.append(event.detach().numpy())
 
 def next_equity_size_and_dividents(Ei, size):
+    """
+    This function computes the next equity, size and dividends of the bank.
+    It takes the Equity as imput, inferrs the Deposits from the capital 
+    requirement, and once the total assets (D+E) are known, it computes the
+    proportion of assets that are reserves, and then the loans. 
+    """
     Di = Ei*lmda/(1-lmda)
     total_assets = Di + Ei
-    Mi = t.mul(percent_assets_to_reserves(Ei), total_assets)
+    Mi = t.mul(percent_assets_to_reserves(Ei), total_assets) ## NN in action
 
     # Li = Di + Ei - Mi
     Li = t.add(t.add(Di, Ei), -Mi)
@@ -203,12 +233,11 @@ def next_equity_size_and_dividents(Ei, size):
 
     # ROE = t.div(profits, Ei) # around 10%, close to empirical ROE
 
-    size = size_of_bank_after_mergers(size, equity_next)
+    size_next = size_of_bank_after_mergers(size, equity_next)
 
-    return equity_next, size, dividends
+    return equity_next, size_next, dividends
  
 def objective():
-    # value = t.zeros_like(Ei)
     value = t.zeros(N_banks)
     # draw from the simplex of size N_banks
     size = t.distributions.dirichlet.Dirichlet(t.ones(N_banks)).sample() * N_banks
@@ -217,12 +246,13 @@ def objective():
     n_simulations_in_epoch=10
     for _ in range(n_simulations_in_epoch):
         Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity
-        discount = 1 #SDF
+        SDF_t = 1.0
         for _ in range(T):
-            Ei, size, dividends = next_equity_size_and_dividents(Ei, size) # update Ei
-            # value += discount*dividends 
-            value = t.add(value, t.mul(discount, dividends))
-            discount *= discount*beta# TODO: add stochastic discount factor
+            # update Ei
+            Ei, size, dividends = next_equity_size_and_dividents(Ei, size) 
+            # value += SDF*dividends 
+            value = t.add(value, t.mul(SDF, dividends))
+            SDF_t *= SDF 
             
 
     return t.sum(value) # the social planner cares equally about all banks
