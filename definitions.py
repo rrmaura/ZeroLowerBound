@@ -4,6 +4,8 @@ is a partial equilibrium model, with only heteorgeneous banks.
 Banks can choose Loans (L), Deposits (D), Reserves (M) and Equity (E)
 such that M+L = D+E
 """
+# why aren't all banks the same? 
+# TODO: NEURAL NETWORK NEED NEW IMPUTS: Y and A, to discover the demand for loans and deposits
 # TODO: parameters - calibration?
 # is INITIAL_EQUITY = 1 reasonable? How many banks? this affectgs the amount of loans
 # think about the rL function and why is it so low
@@ -15,6 +17,8 @@ such that M+L = D+E
 # hidden_size bigger ( is 10 small?). try 64, 128? I dont think more layers are needed
 # TODO: think 
 # is it reasonable that the proportion of reserves increases linearly with E?
+
+
 import torch as t
 import torch.nn as nn
 import torch.nn.functional as F
@@ -28,30 +32,40 @@ np.random.seed(0)
 random.seed(0)
 
 # Parameters:
-MAX_EQUITY = 100 # max equity used for training the NN
-INITIAL_EQUITY = 1 # initial equity of the banks
-N_banks = 150 # number of banks (TODO: change it to 4236)
-T = 150 # number of time steps
+Y0 = 20000
+Y = Y0 # initial income
+g_y = 0.01 # growth rate of Y # TODO: change to steady state growth D
+
+A0 = 1
+A = A0 # initial technoloty 
+g_a = 0.02 # growth rate of A
+
+MAX_EQUITY = 200 # max equity used for training the NN
+INITIAL_EQUITY = 35 # initial equity of the banks
+N_banks = 100 # number of banks (TODO: change it to 4236)
+T = 50 # number of time steps
 theta = 0.5 # risk_aversion , inverse of the elasticity of substitution
-beta = 0.96 # discount factor
+beta = 0.98 # discount factor
 # TODO: add stochastic discount factor (utility function of households)
 SDF = 0.97 * beta #Stochastic discount factor 
 lmda = 0.85 # legal ratio of deposits to assets (0.97 in calibration, but this
 # value gives a more reasonable ratio of deposits to equity )
 propor_div = 0.04 # proportion paid out as dividends (0.02<mu<0.05)
 rM = 0.03 # interest rate central bank
-sigma = 0.01 # variance of the shock of cost (we have to think about units)
+sigma = 0.00 # variance of the shock of cost (we have to think about units)
 R_M = 1 + rM 
 
 
 # we assume the cost is linear in L and D
-cost_L = 0.0001
-cost_D = 0.0001
+cost_L = 0.0
+cost_D = 0.02
 
 # define functions of demand (depends on total L and D)
 
     
-def rL(Li):
+def rL(Li, time):
+    A = A0 * (1+g_a)**time
+
     total_L = t.sum(Li)
     K = total_L 
     K = t.max(K, t.tensor(0.00001)) # stop division by 0
@@ -59,48 +73,49 @@ def rL(Li):
     
     alpha = 0.3
     # The formula of returns for the firm implies:
-    # r = alpha * k**(alpha-1)
-    r_L = t.mul(alpha, t.pow(K, alpha-1)) 
+    # R = 1 + r = A * alpha * k**(alpha-1)
+    r_L = t.mul(A, t.mul(alpha, t.pow(K, alpha-1))) - 1
+
     return r_L
 
-def R_L(Li):
+def R_L(Li,time):
     # The demand for loans is not linear in the total amount of loans
     # it should come determined by the demand for deposits
-    r_L = rL(Li)
+    r_L = rL(Li, time)
     R_L = t.add(1, r_L) # R = 1+r
     return R_L
 
-def rD(Di):
-    # The demand for deposits is not linear in the total amount of deposits
-    # it is derived from the household maximization problem
+def rD(Di,time):
+    # # The demand for deposits is not linear in the total amount of deposits
+    # # it is derived from the household maximization problem
 
-    # TODO: what is Y in the household problem?
-    # we know that the ration Y/D is around 10% - 20%
+    # Y = Y0 * (1+g_y) ** time 
 
-    Y = 100
-    total_D = t.sum(Di)
-    # The formula of returns for the firm implies:
-    # r**((theta-1)/(theta)) = beta**(1/theta) * (Y-D)/D 
-    # or 
-    # r = (  beta**(1/theta) * (Y-D)/D  )**(theta/(theta-1))
-    # or 
-    # r = c * base**expon 
-    # where 
-    # c = beta**1/(theta-1),  expon=(theta/(theta-1)), base = (Y-D)/D
+    # total_D = t.sum(Di)
+    # # The formula of returns for the firm implies:
+    # # r**((theta-1)/(theta)) = beta**(1/theta) * (Y-D)/D 
+    # # or 
+    # # r = (  beta**(1/theta) * (Y-D)/D  )**(theta/(theta-1))
+    # # or 
+    # # r = c * base**expon 
+    # # where 
+    # # c = beta**1/(theta-1),  expon=(theta/(theta-1)), base = (Y-D)/D
 
-    exponent = theta/(theta-1)
-    constant =  beta**(1/(theta-1))
-    base = t.add(t.div(Y, total_D),-1)
+    # exponent = theta/(theta-1)
+    # constant =  beta**(1/(theta-1))
+    # base = t.add(t.div(Y, total_D),-1)
 
-    rD = t.mul(constant, t.pow(base, exponent))
+    # rD = t.mul(constant, t.pow(base, exponent)) - 1
 
-    # zero lower bound
-    rD = t.max(rD, t.tensor(0.0))
-    return rD
+    # # zero lower bound
+    # rD = t.max(rD, t.tensor(0.0)) 
+    # return rD
+
+    return t.tensor(0.02)
    
 
-def R_D(Di):
-    r_D = rD(Di)
+def R_D(Di, time):
+    r_D = rD(Di, time)
     R_D = t.add(1, r_D) # R = 1+r
     return R_D
 
@@ -149,7 +164,12 @@ def size_of_bank_after_mergers(size, Ei):
     size_bankrupt = t.sum(t.masked_select(size, bankrupt_mask))
 
     # probability of buying a bankrupt bank is proportional to the equity of the bank
-    prob_buy_bankrupt = t.div(Ei, t.sum(Ei))
+    total_equity = t.sum(Ei)
+    
+    if total_equity < 0.00001:
+        raise ValueError("total equity is 0, so we cannot divide by it")
+    
+    prob_buy_bankrupt = t.div(Ei, total_equity)
     
     new_size = t.add(size, t.mul(size_bankrupt, prob_buy_bankrupt))
     return new_size 
@@ -193,7 +213,7 @@ class PolicyNet(nn.Module):
         x = t.sigmoid(self.fc3(x))
         return x
 hidden_size = 16
-percent_assets_to_reserves = PolicyNet(input_size=N_banks,
+percent_assets_to_reserves = PolicyNet(input_size=N_banks + 1, # include time
                       hidden_size=hidden_size,
                       output_size=N_banks)
 
@@ -204,7 +224,7 @@ hist_D = []
 hist_M = []
 append_hist = lambda history, event: history.append(event.detach().numpy())
 
-def next_equity_size_and_dividents(Ei, size):
+def next_equity_size_and_dividents(Ei, size, time):
     """
     This function computes the next equity, size and dividends of the bank.
     It takes the Equity as imput, inferrs the Deposits from the capital 
@@ -213,15 +233,19 @@ def next_equity_size_and_dividents(Ei, size):
     """
     Di = Ei*lmda/(1-lmda)
     total_assets = Di + Ei
-    Mi = t.mul(percent_assets_to_reserves(Ei), total_assets) ## NN in action
+
+    # input = Ei, time
+    time_tensor = t.tensor(time).view(1)
+    input = t.cat((Ei, time_tensor), dim=-1)
+    Mi = t.mul(percent_assets_to_reserves(input), total_assets) ## NN in action
 
     # Li = Di + Ei - Mi
     Li = t.add(t.add(Di, Ei), -Mi)
 
     # profits = Mi*rM + Li*rL(Li) - Di*rD(Di) - cost(Li,Di)
     profits = t.add(t.add(t.mul(Mi, rM),
-                    t.mul(Li, rL(Li))),
-                    t.add(-t.mul(Di, rD(Di)), 
+                    t.mul(Li, rL(Li, time))),
+                    t.add(-t.mul(Di, rD(Di, time)), 
                     -cost(Li,Di, size)))
 
     dividends = t.mul(propor_div, profits)
@@ -241,11 +265,15 @@ def objective():
 
     n_simulations_in_epoch=10
     for _ in range(n_simulations_in_epoch):
-        Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity
+        # Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity
+
+        Ei = t.ones(N_banks) * INITIAL_EQUITY
         size = t.distributions.dirichlet.Dirichlet(t.ones(N_banks)).sample() * N_banks
         sdf_t = 1.0
-        for _ in range(T):
-            Ei, size, dividends = next_equity_size_and_dividents(Ei, size) # update Ei
+        for time in range(T):
+            previousE = Ei
+            previousSize =  size # for debug
+            Ei, size, dividends = next_equity_size_and_dividents(Ei, size, time) # update Ei
             # value += sdf_t*dividends 
             value = t.add(value, t.mul(sdf_t, dividends))
             sdf_t *= SDF # TODO: add stochastic discount factor
