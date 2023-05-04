@@ -5,6 +5,7 @@ Banks can choose Loans (L), Deposits (D), Reserves (M) and Equity (E)
 such that M+L = D+E
 """
 # why aren't all banks the same? 
+# A is the technology, Change it so that rD = 0.05
 # TODO: NEURAL NETWORK NEED NEW IMPUTS: Y and A, to discover the demand for loans and deposits
 # TODO: parameters - calibration?
 # is INITIAL_EQUITY = 1 reasonable? How many banks? this affectgs the amount of loans
