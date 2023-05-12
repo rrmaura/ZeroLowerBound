@@ -29,7 +29,7 @@ t.manual_seed(1)
 np.random.seed(1)
 random.seed(1)
 
-percent_assets_to_reserves = initialize_and_load_NN()
+percent_assets_to_reserves = initialize_and_load_NN() 
 
 # plot the policy function for the first bank from E = 0 to E = INITIAL_EQUITY
 # assume all other banks have the same equity = INITIAL_EQUITY
@@ -37,7 +37,11 @@ n_points = 1000
 E = t.ones(n_points, N_banks) * INITIAL_EQUITY
 E[:,0] = t.linspace(0,INITIAL_EQUITY,n_points)
 total_assets = t.add(E, E*lmda/(1-lmda))
-M = t.mul(percent_assets_to_reserves(E), total_assets)
+
+time_tensor = t.zeros(n_points,1)
+input = t.cat((E, time_tensor), dim=1)
+
+M = t.mul(percent_assets_to_reserves(input), total_assets)
 equity_first_bank = E[:,0].detach().numpy()
 reserves_first_bank = M[:,0].detach().numpy()
 
@@ -48,7 +52,7 @@ plt.savefig('plots/reserves_first_bank.png')
 plt.clf()
 
 # run a simulation
-length_simulation = 25
+length_simulation = MAX_TIME
 
 # history 
 hist_totalAssets = np.zeros((length_simulation, N_banks))
@@ -65,14 +69,17 @@ E = t.ones(N_banks)
 size = t.ones(N_banks)
 sum_size = size.sum()
 for i in tqdm(range(length_simulation)):
+    time = i
     # ensure simulation space is same as training space
     assert (E >= 0).all()
     assert (MAX_EQUITY >= E).all() 
     assert sum_size == size.sum() # sum size should stay constant 
-    E, size, dividends = next_equity_size_and_dividents(E, size) # update E
+    E, size, dividends = next_equity_size_and_dividents(E, size, time) # update E
     D = E*lmda/(1-lmda)
     total_assets = t.add(E, D)
-    M = t.mul(percent_assets_to_reserves(E), total_assets)
+    time_tensor = t.tensor(time).view(1)
+    input = t.cat((E, time_tensor), dim=-1)
+    M = t.mul(percent_assets_to_reserves(input), total_assets)
     L = t.add(t.add(E, E*lmda/(1-lmda)), -M)
 
     # append history
@@ -81,8 +88,8 @@ for i in tqdm(range(length_simulation)):
     hist_L[i] = L.detach().numpy()
     hist_D[i] = D.detach().numpy()
     hist_M[i] = M.detach().numpy()
-    hist_rL[i] = rL(L).detach().numpy()
-    hist_rD[i] = rD(D).detach().numpy()
+    hist_rL[i] = rL(L, time).detach().numpy()
+    hist_rD[i] = rD(D,L, time).detach().numpy()
 
 accounting_condition = (hist_totalAssets - hist_M - hist_L)
 assert np.isclose(accounting_condition,0, 0.0001, 0.0001).all
@@ -185,4 +192,5 @@ plt.clf()
 # see how the model evolves (retraining the NN) with r_m increasing from -0.1 to 0.1
 
 print("\n \n done \n \n")
+
 

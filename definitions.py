@@ -33,18 +33,16 @@ np.random.seed(0)
 random.seed(0)
 
 # Parameters:
-Y0 = 20000
-Y = Y0 # initial income
-g_y = 0.01 # growth rate of Y # TODO: change to steady state growth D
+Y0 = 1000 # 40000
+g_y = 0.04 # growth rate of Y GDP # TODO: change to steady state growth D
 
-A0 = 1
-A = A0 # initial technoloty 
-g_a = 0.02 # growth rate of A
+A0 = 500 #2500
+g_a = 0.01 # growth rate of A
 
-MAX_EQUITY = 200 # max equity used for training the NN
-INITIAL_EQUITY = 35 # initial equity of the banks
+MAX_EQUITY = 100 # max equity used for training the NN
+INITIAL_EQUITY = 1 # 35 # initial equity of the banks
+MAX_TIME = 30 # max time used for training the NN
 N_banks = 100 # number of banks (TODO: change it to 4236)
-T = 50 # number of time steps
 theta = 0.5 # risk_aversion , inverse of the elasticity of substitution
 beta = 0.98 # discount factor
 # TODO: add stochastic discount factor (utility function of households)
@@ -55,11 +53,11 @@ propor_div = 0.04 # proportion paid out as dividends (0.02<mu<0.05)
 rM = 0.03 # interest rate central bank
 sigma = 0.00 # variance of the shock of cost (we have to think about units)
 R_M = 1 + rM 
-
+alpha = 0.3 # capital share Y = A * K**(alpha)
 
 # we assume the cost is linear in L and D
 cost_L = 0.0
-cost_D = 0.02
+cost_D = 0.0
 
 # define functions of demand (depends on total L and D)
 
@@ -72,11 +70,10 @@ def rL(Li, time):
     K = t.max(K, t.tensor(0.00001)) # stop division by 0
     # TODO: in case K is 0, give a warning
     
-    alpha = 0.3
     # The formula of returns for the firm implies:
     # R = 1 + r = A * alpha * k**(alpha-1)
     r_L = t.mul(A, t.mul(alpha, t.pow(K, alpha-1))) - 1
-
+    r_L = bound_rates(r_L)
     return r_L
 
 def R_L(Li,time):
@@ -86,11 +83,16 @@ def R_L(Li,time):
     R_L = t.add(1, r_L) # R = 1+r
     return R_L
 
-def rD(Di,time):
+def rD(Di,Li, time):
     # # The demand for deposits is not linear in the total amount of deposits
     # # it is derived from the household maximization problem
 
+    # # exogenous formula for Y
     # Y = Y0 * (1+g_y) ** time 
+
+    # # # endogenous formula for Y = A * K**(alpha)
+    # # K = t.sum(Li)
+    # # Y = A0 * (1+g_a)**time * t.pow(K, alpha)
 
     # total_D = t.sum(Di)
     # # The formula of returns for the firm implies:
@@ -110,13 +112,14 @@ def rD(Di,time):
 
     # # zero lower bound
     # rD = t.max(rD, t.tensor(0.0)) 
+    # rD = bound_rates(rD)
     # return rD
 
     return t.tensor(0.02)
    
 
-def R_D(Di, time):
-    r_D = rD(Di, time)
+def R_D(Di,Li, time):
+    r_D = rD(Di,Li,  time)
     R_D = t.add(1, r_D) # R = 1+r
     return R_D
 
@@ -173,6 +176,9 @@ def size_of_bank_after_mergers(size, Ei):
     prob_buy_bankrupt = t.div(Ei, total_equity)
     
     new_size = t.add(size, t.mul(size_bankrupt, prob_buy_bankrupt))
+
+    # eliminate bankrupt banks. Set their size to 0. 
+    new_size = t.where(bankrupt_mask, t.tensor(0.0), new_size)
     return new_size 
 
 def cost(Li,Di, size):
@@ -225,6 +231,13 @@ hist_D = []
 hist_M = []
 append_hist = lambda history, event: history.append(event.detach().numpy())
 
+# def percent_assets_to_reserves_function(Ei,time):
+#     # input = Ei, time
+#     time_tensor = t.tensor(time).view(1)
+#     input = t.cat((Ei, time_tensor), dim=-1)
+#     return percent_assets_to_reserves(input) # IS THIS WRONG? IS THIS USING THE NOT INITIALIZED FUNCTION? 
+
+
 def next_equity_size_and_dividents(Ei, size, time):
     """
     This function computes the next equity, size and dividends of the bank.
@@ -234,8 +247,6 @@ def next_equity_size_and_dividents(Ei, size, time):
     """
     Di = Ei*lmda/(1-lmda)
     total_assets = Di + Ei
-
-    # input = Ei, time
     time_tensor = t.tensor(time).view(1)
     input = t.cat((Ei, time_tensor), dim=-1)
     Mi = t.mul(percent_assets_to_reserves(input), total_assets) ## NN in action
@@ -243,13 +254,16 @@ def next_equity_size_and_dividents(Ei, size, time):
     # Li = Di + Ei - Mi
     Li = t.add(t.add(Di, Ei), -Mi)
 
-    # profits = Mi*rM + Li*rL(Li) - Di*rD(Di) - cost(Li,Di)
+    # profits = Mi*rM + Li*rL(Li) - Di*rD(Di)Li,  - cost(Li,Di)
     profits = t.add(t.add(t.mul(Mi, rM),
                     t.mul(Li, rL(Li, time))),
-                    t.add(-t.mul(Di, rD(Di, time)), 
+                    t.add(-t.mul(Di, rD(Di,Li,  time)), 
                     -cost(Li,Di, size)))
 
     dividends = t.mul(propor_div, profits)
+    # dividends cannot be negative 
+    dividends = t.max(dividends, t.tensor(0.0))
+
     # equity_next = Ei + profits - dividends
     equity_next = t.add(t.add(Ei, profits), -dividends)    
     # if equity negative, the bank is bankrupt forever
@@ -266,14 +280,17 @@ def objective():
 
     n_simulations_in_epoch=10
     for _ in range(n_simulations_in_epoch):
-        # Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity
-
-        Ei = t.ones(N_banks) * INITIAL_EQUITY
-        size = t.distributions.dirichlet.Dirichlet(t.ones(N_banks)).sample() * N_banks
+        # random initialization 
+        Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity
+        size = t.distributions.dirichlet.Dirichlet(t.ones(N_banks)).sample() * N_banks 
+        # # symmetric deterministic initialization
+        # Ei = t.ones(N_banks) * INITIAL_EQUITY
+        # size = t.ones(N_banks) * (1.0/N_banks)
         sdf_t = 1.0
-        for time in range(T):
+        for time in range(MAX_TIME):
             previousE = Ei
             previousSize =  size # for debug
+
             Ei, size, dividends = next_equity_size_and_dividents(Ei, size, time) # update Ei
             # value += sdf_t*dividends 
             value = t.add(value, t.mul(sdf_t, dividends))
@@ -286,9 +303,10 @@ optimizer = optim.Adam(percent_assets_to_reserves.parameters(), lr=0.001)
 
 def initialize_and_load_NN():
     try: 
-        percent_assets_to_reserves = PolicyNet(input_size=N_banks,
+        percent_assets_to_reserves = PolicyNet(input_size=N_banks+1,
                                     hidden_size=hidden_size,
                                     output_size=N_banks)
+        
     
         percent_assets_to_reserves.load_state_dict(t.load('percent_assets_to_reserves.pt'))
         return percent_assets_to_reserves
@@ -297,3 +315,15 @@ def initialize_and_load_NN():
 
 
 losses = []
+
+
+def bound_rates(unbound_r): 
+    """
+    This function takes a rate and returns a bounded rate. 
+    It is a differentiable function, to make training easier. 
+
+    """
+
+    low_bound = 0.0
+    high_bound = 0.20
+    return t.clamp(unbound_r, low_bound, high_bound)
