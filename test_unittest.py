@@ -45,8 +45,11 @@ class TestSimulation(unittest.TestCase):
         def deterministic_value_function(Ei, size): 
             value = t.zeros_like(Ei)
             discount = 1 #SDF
-            for _ in range(T):
-                Ei, size, dividends = next_equity_size_and_dividents(Ei, size) # update Ei
+            for time in range(MAX_TIME):
+                Ei, size, dividends = next_equity_size_and_dividents(Ei, 
+                                                                    size, 
+                                                                    time, 
+                                                                    percent_assets_to_reserves) # update Ei
                 # value += discount*dividends 
                 value = t.add(value, t.mul(discount, dividends))
                 discount *= discount*beta# TODO: add stochastic discount factor

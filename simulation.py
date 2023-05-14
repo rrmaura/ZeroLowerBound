@@ -64,17 +64,24 @@ hist_rL = np.zeros(length_simulation)
 hist_rD = np.zeros(length_simulation)
 hist_rM = np.ones(length_simulation) * rM
 
+# equity and size like in training_NN
+Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity
+size = t.distributions.dirichlet.Dirichlet(t.ones(N_banks)).sample() * N_banks 
+
 # initial equity and size
-E = t.ones(N_banks)
-size = t.ones(N_banks)
+# E = t.ones(N_banks) * MAX_EQUITY/10
+# size = t.ones(N_banks)
 sum_size = size.sum()
 for i in tqdm(range(length_simulation)):
     time = i
     # ensure simulation space is same as training space
     assert (E >= 0).all()
-    assert (MAX_EQUITY >= E).all() 
+    # assert (MAX_EQUITY >= E).all() 
     assert sum_size == size.sum() # sum size should stay constant 
-    E, size, dividends = next_equity_size_and_dividents(E, size, time) # update E
+    E, size, dividends = next_equity_size_and_dividents(E, 
+                                                        size, 
+                                                        time, 
+                                                        percent_assets_to_reserves) # update E
     D = E*lmda/(1-lmda)
     total_assets = t.add(E, D)
     time_tensor = t.tensor(time).view(1)
