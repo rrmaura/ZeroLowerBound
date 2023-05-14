@@ -36,7 +36,7 @@ random.seed(0)
 Y0 = 1000 # 40000
 g_y = 0.04 # growth rate of Y GDP # TODO: change to steady state growth D
 
-A0 = 500 #2500
+A0 = 1000 #2500
 g_a = 0.01 # growth rate of A
 
 MAX_EQUITY = 100 # max equity used for training the NN
@@ -59,6 +59,9 @@ alpha = 0.3 # capital share Y = A * K**(alpha)
 cost_L = 0.0
 cost_D = 0.0
 
+# NN parameters
+hidden_size = 16
+
 # define functions of demand (depends on total L and D)
 
     
@@ -75,6 +78,7 @@ def rL(Li, time):
     r_L = t.mul(A, t.mul(alpha, t.pow(K, alpha-1))) - 1
     r_L = bound_rates(r_L)
     return r_L
+    # return t.tensor(0.07)
 
 def R_L(Li,time):
     # The demand for loans is not linear in the total amount of loans
@@ -195,6 +199,18 @@ def cost(Li,Di, size):
     # Note: cost can be negative, but this is not a problem. 
     return cost
 
+
+
+#############################################################################
+#############################################################################
+#############################################################################
+#############################################################################
+#############################################################################
+#############################################################################
+#############################################################################
+#############################################################################
+
+
 # try method 1 from Deep Learning for solving dynamic economic models.
 # by Lilia Maliar, Serguei Maliar, Pablo Winant 
 
@@ -219,16 +235,7 @@ class PolicyNet(nn.Module):
         x = F.relu(self.fc2(x))
         x = t.sigmoid(self.fc3(x))
         return x
-hidden_size = 16
-percent_assets_to_reserves = PolicyNet(input_size=N_banks + 1, # include time
-                      hidden_size=hidden_size,
-                      output_size=N_banks)
 
-# history for debugging
-hist_E = []
-hist_L = []
-hist_D = []
-hist_M = []
 append_hist = lambda history, event: history.append(event.detach().numpy())
 
 # def percent_assets_to_reserves_function(Ei,time):
@@ -238,7 +245,7 @@ append_hist = lambda history, event: history.append(event.detach().numpy())
 #     return percent_assets_to_reserves(input) # IS THIS WRONG? IS THIS USING THE NOT INITIALIZED FUNCTION? 
 
 
-def next_equity_size_and_dividents(Ei, size, time):
+def next_equity_size_and_dividents(Ei, size, time, percent_assets_to_reserves):
     """
     This function computes the next equity, size and dividends of the bank.
     It takes the Equity as imput, inferrs the Deposits from the capital 
@@ -275,31 +282,6 @@ def next_equity_size_and_dividents(Ei, size, time):
 
     return equity_next, size_next, dividends
  
-def objective():
-    value = t.zeros(N_banks)
-
-    n_simulations_in_epoch=10
-    for _ in range(n_simulations_in_epoch):
-        # random initialization 
-        Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity
-        size = t.distributions.dirichlet.Dirichlet(t.ones(N_banks)).sample() * N_banks 
-        # # symmetric deterministic initialization
-        # Ei = t.ones(N_banks) * INITIAL_EQUITY
-        # size = t.ones(N_banks) * (1.0/N_banks)
-        sdf_t = 1.0
-        for time in range(MAX_TIME):
-            previousE = Ei
-            previousSize =  size # for debug
-
-            Ei, size, dividends = next_equity_size_and_dividents(Ei, size, time) # update Ei
-            # value += sdf_t*dividends 
-            value = t.add(value, t.mul(sdf_t, dividends))
-            sdf_t *= SDF # TODO: add stochastic discount factor
-    # divide the value by the number of simulations to get the average
-    value = t.div(value, n_simulations_in_epoch)
-    return t.mean(value) # the social planner cares equally about all banks
-
-optimizer = optim.Adam(percent_assets_to_reserves.parameters(), lr=0.001)
 
 def initialize_and_load_NN():
     try: 
@@ -312,9 +294,6 @@ def initialize_and_load_NN():
         return percent_assets_to_reserves
     except: 
         print("no weights found for the NN. Did you run train_NN.py?")
-
-
-losses = []
 
 
 def bound_rates(unbound_r): 

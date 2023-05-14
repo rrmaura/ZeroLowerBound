@@ -16,10 +16,53 @@ t.manual_seed(0)
 np.random.seed(0)
 random.seed(0)
 
-n_epochs = 200 # number of epochs
+n_epochs = 400 # number of epochs
 patience = 200  # number of epochs to wait before early stopping
 
+percent_assets_to_reserves = PolicyNet(input_size=N_banks + 1, # include time
+                      hidden_size=hidden_size,
+                      output_size=N_banks)
+
+optimizer = optim.Adam(percent_assets_to_reserves.parameters(), lr=0.001)
+
+
+def objective():
+    value = t.zeros(N_banks)
+
+    n_simulations_in_epoch=10
+    for _ in range(n_simulations_in_epoch):
+        # random initialization 
+        Ei = t.mul(t.rand(N_banks), MAX_EQUITY) # initial equity
+        size = t.distributions.dirichlet.Dirichlet(t.ones(N_banks)).sample() * N_banks 
+        # # symmetric deterministic initialization
+        # Ei = t.ones(N_banks) * INITIAL_EQUITY
+        # size = t.ones(N_banks) * (1.0/N_banks)
+        sdf_t = 1.0
+        for time in range(MAX_TIME):
+            previousE = Ei
+            previousSize =  size # for debug
+
+            Ei, size, dividends = next_equity_size_and_dividents(Ei, 
+                                                                size, 
+                                                                time,
+                                                                percent_assets_to_reserves) # update Ei
+            # value += sdf_t*dividends 
+            value = t.add(value, t.mul(sdf_t, dividends))
+            sdf_t *= SDF # TODO: add stochastic discount factor
+    # divide the value by the number of simulations to get the average
+    value = t.div(value, n_simulations_in_epoch)
+    return t.mean(value) # the social planner cares equally about all banks
+
+
+######################################################################
+######################################################################
+######################################################################
+######################################################################
+
+# train neural network 
+
 best_loss = float('inf')
+losses = []
 wait = 0  # number of epochs waited
 for epoch in tqdm(range(n_epochs)):
     # keep track of the training error
