@@ -2,7 +2,7 @@ import torch
 from simple_definitions import *
 
 initial_deposits = 1
-TODAY = 50
+TODAY = 1
 # get a sense of the rD. Plot it with different values of initial deposits
 def f(time, total_D):
     total_D = torch.tensor(total_D)
@@ -49,10 +49,13 @@ def profits_monopoly(D):
 
 # also plot a vertical line in the solution with optimal monopoly depostits
 Rm = 1 + rM 
-monopoly_deposits = (Rm / (2*(Rm + (1/beta**2)))) * GDP(TODAY)
-print(monopoly_deposits)
+T = 0.26 # 1/(Rm*beta**2)
+propor_savings_solution = (1+T)-np.sqrt(T*(2+T))
+# monopoly_deposits = (Rm / (2*(Rm + (1/beta**2)))) * GDP(TODAY)
+monopoly_deposits = propor_savings_solution * GDP(TODAY)
+print("monopoly deposits: ", monopoly_deposits)
 rD_monopoly = f(TODAY, monopoly_deposits)
-
+print("rD monopoly: ", rD_monopoly)
 
 Deposits = SimplePolicyNet(input_size=N_banks+1,
                                 hidden_size=hidden_size,
@@ -75,7 +78,11 @@ plt.plot(total_D, profits)
 plt.plot(total_D, interst_rate)
 plt.axvline(x=monopoly_deposits, color='r', linestyle='--')
 plt.axvline(x=NN_deposits.detach().numpy()[0], color='y', linestyle='--')
-
+# axis 
+plt.xlabel('Total deposits')
+plt.ylabel('Profits')
+# legend
+plt.legend(['Profits', 'Interest rate', 'Monopoly deposits', 'NN deposits'])
 plt.show()
 
 plt.plot(total_D, interst_rate)
