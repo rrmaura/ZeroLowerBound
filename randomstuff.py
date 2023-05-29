@@ -49,7 +49,8 @@ def profits_monopoly(D):
 
 # also plot a vertical line in the solution with optimal monopoly depostits
 Rm = 1 + rM 
-T = 0.26 # 1/(Rm*beta**2)
+T =  1/(Rm*beta**2) # we would need to get T = 0.26 to have reasonable rD. 
+# this is unfeasible, we need to change theta! 
 propor_savings_solution = (1+T)-np.sqrt(T*(2+T))
 # monopoly_deposits = (Rm / (2*(Rm + (1/beta**2)))) * GDP(TODAY)
 monopoly_deposits = propor_savings_solution * GDP(TODAY)
